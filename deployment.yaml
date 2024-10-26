@@ -147,7 +147,7 @@ spec:
     app: subscriber
 
 ---
-apiVersion: autoscaling/v2beta2
+apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: publisher-autoscaler
@@ -168,7 +168,7 @@ spec:
         averageUtilization: 50
 
 ---
-apiVersion: autoscaling/v2beta2
+apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: subscriber-autoscaler
