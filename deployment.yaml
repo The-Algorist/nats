@@ -22,13 +22,13 @@ spec:
         - containerPort: 8222
 
 ---
-
 apiVersion: v1
 kind: Service
 metadata:
   name: nats-server
   namespace: video-streaming
 spec:
+  type: ClusterIP  # Internal communication
   ports:
   - port: 4222
     targetPort: 4222
@@ -36,7 +36,6 @@ spec:
     app: nats-server
 
 ---
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -54,26 +53,26 @@ spec:
     spec:
       containers:
       - name: websocket-server
-        image: mysteryalgorist/websocket-server:latest  # Change this to your WebSocket image
+        image: mysteryalgorist/websocket-server:latest
         ports:
         - containerPort: 3001
 
 ---
-
 apiVersion: v1
 kind: Service
 metadata:
   name: websocket-server
   namespace: video-streaming
 spec:
+  type: NodePort  # Expose to external traffic
   ports:
   - port: 3001
     targetPort: 3001
+    nodePort: 30001  # Optional: specify or let Kubernetes assign
   selector:
     app: websocket-server
 
 ---
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -96,21 +95,21 @@ spec:
         - containerPort: 80
 
 ---
-
 apiVersion: v1
 kind: Service
 metadata:
   name: publisher
   namespace: video-streaming
 spec:
+  type: NodePort  # Expose to external traffic
   ports:
   - port: 8080
     targetPort: 80
+    nodePort: 30002  # Optional: specify or let Kubernetes assign
   selector:
     app: publisher
 
 ---
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -128,20 +127,63 @@ spec:
     spec:
       containers:
       - name: subscriber
-        image: mysteryalgorist/subscriber-image:latest  # Change this to your Subscriber image
+        image: mysteryalgorist/subscriber-image:latest
         ports:
         - containerPort: 80
 
 ---
-
 apiVersion: v1
 kind: Service
 metadata:
   name: subscriber
   namespace: video-streaming
 spec:
+  type: NodePort  # Expose to external traffic
   ports:
   - port: 8081
     targetPort: 80
+    nodePort: 30003  # Optional: specify or let Kubernetes assign
   selector:
     app: subscriber
+
+---
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: publisher-autoscaler
+  namespace: video-streaming
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: publisher
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+
+---
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: subscriber-autoscaler
+  namespace: video-streaming
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: subscriber
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
