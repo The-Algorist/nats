@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Publisher</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background-color: #f0f0f5;
+      margin: 0;
+      font-family: Arial, sans-serif;
+    }
+    h1 {
+      color: #333;
+    }
+    video {
+      width: 100%;
+      max-width: 600px;
+      height: auto;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      background-color: #e0e0e0;
+    }
+    button {
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 5px;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+      background-color: #218838;
+    }
+    input {
+      margin: 10px;
+      padding: 5px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Publisher - Video Stream</h1>
+  <input type="text" id="cameraId" placeholder="Enter Camera ID (e.g. camera1)" pattern="^camera\d+$">
+  <video id="video" autoplay playsinline></video>
+  <button id="start">Start Streaming</button>
+  <button id="stop">Stop Streaming</button>
+
+  <script>
+    const video = document.getElementById("video");
+    const startButton = document.getElementById("start");
+    const stopButton = document.getElementById("stop");
+    const cameraIdInput = document.getElementById("cameraId");
+    let stream, socket, intervalId;
+
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        console.log("Camera started");
+      } catch (error) {
+        console.error("Error accessing camera:", error);
+      }
+    }
+
+    async function startStreaming() {
+      const cameraId = cameraIdInput.value.trim();
+
+      // Validate the camera ID input format
+      const cameraIdPattern = /^camera\d+$/; // Regex pattern for "cameraX"
+      if (!cameraId || !cameraIdPattern.test(cameraId)) {
+        alert("Please enter a valid Camera ID in the format 'cameraX' (e.g. camera1).");
+        return;
+      }
+
+      await startCamera();
+      socket = new WebSocket("ws://localhost:3001");
+
+      socket.onopen = () => {
+        console.log("WebSocket connection opened");
+        intervalId = setInterval(() => {
+          const canvas = document.createElement("canvas");
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const context = canvas.getContext("2d");
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(async (blob) => {
+            if (blob) {
+              console.log("Blob created");
+              const arrayBuffer = await blob.arrayBuffer();
+              const base64Data = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ cameraId, data: base64Data }));
+                console.log(`Frame sent with Camera ID: ${cameraId}`);
+              }
+            } else {
+              console.error("Failed to create blob");
+            }
+          }, "image/jpeg");
+        }, 100);
+      };
+
+      socket.onerror = (error) => {
+        console.error("WebSocket error:", error);
+      };
+    }
+
+    function stopStreaming() {
+      clearInterval(intervalId);
+      if (socket) socket.close();
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+      }
+      console.log("Streaming stopped");
+    }
+
+    startButton.addEventListener("click", startStreaming);
+    stopButton.addEventListener("click", stopStreaming);
+  </script>
+</body>
+</html>

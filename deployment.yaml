@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats-server
+  namespace: video-streaming
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats-server
+  template:
+    metadata:
+      labels:
+        app: nats-server
+    spec:
+      containers:
+      - name: nats-server
+        image: nats:latest
+        args: ["-js"]
+        ports:
+        - containerPort: 4222
+        - containerPort: 8222
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-server
+  namespace: video-streaming
+spec:
+  ports:
+  - port: 4222
+    targetPort: 4222
+  selector:
+    app: nats-server
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: websocket-server
+  namespace: video-streaming
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: websocket-server
+  template:
+    metadata:
+      labels:
+        app: websocket-server
+    spec:
+      containers:
+      - name: websocket-server
+        image: mysteryalgorist/websocket-server:latest  # Change this to your WebSocket image
+        ports:
+        - containerPort: 3001
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: websocket-server
+  namespace: video-streaming
+spec:
+  ports:
+  - port: 3001
+    targetPort: 3001
+  selector:
+    app: websocket-server
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: publisher
+  namespace: video-streaming
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: publisher
+  template:
+    metadata:
+      labels:
+        app: publisher
+    spec:
+      containers:
+      - name: publisher
+        image: mysteryalgorist/publisher-image:latest
+        ports:
+        - containerPort: 80
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: publisher
+  namespace: video-streaming
+spec:
+  ports:
+  - port: 8080
+    targetPort: 80
+  selector:
+    app: publisher
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: subscriber
+  namespace: video-streaming
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: subscriber
+  template:
+    metadata:
+      labels:
+        app: subscriber
+    spec:
+      containers:
+      - name: subscriber
+        image: mysteryalgorist/subscriber-image:latest  # Change this to your Subscriber image
+        ports:
+        - containerPort: 80
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: subscriber
+  namespace: video-streaming
+spec:
+  ports:
+  - port: 8081
+    targetPort: 80
+  selector:
+    app: subscriber

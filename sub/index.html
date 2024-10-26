@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subscriber - Video Feed</title>
+  <style>
+    /* Styles for the layout */
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background-color: #f0f0f5;
+      margin: 0;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    #videoContainer {
+      position: relative;
+      width: 100%;
+      max-width: 600px;
+      height: 0;
+      padding-top: 56.25%;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      background-color: #e0e0e0;
+      overflow: hidden;
+    }
+    #videoFrame {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    #videoIcon {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 48px;
+      color: #aaa;
+    }
+    #status {
+      color: #555;
+      margin: 20px 0;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 5px;
+      transition: background-color 0.3s;
+    }
+    button:disabled {
+      background-color: #b2dffc;
+      cursor: not-allowed;
+    }
+    button:hover:not(:disabled) {
+      background-color: #0056b3;
+    }
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: rgba(0, 0, 0, 0.5);
+      color: white;
+      font-size: 24px;
+      border-radius: 8px;
+      display: none;
+    }
+    @media (max-width: 600px) {
+      h1 {
+        font-size: 20px;
+      }
+      button {
+        font-size: 14px;
+        padding: 8px 16px;
+      }
+      #videoIcon {
+        font-size: 36px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Subscriber - Video Feed</h1>
+  <label for="cameraSelect">Choose Camera Feed:</label>
+  <select id="cameraSelect">
+    <option value="">Select a camera</option>
+    <option value="camera1">Camera 1</option>
+    <option value="camera2">Camera 2</option>
+    <option value="camera3">Camera 3</option>
+  </select>
+  <div id="videoContainer">
+    <img id="videoFrame" alt="Video Feed">
+    <div id="videoIcon">🎥</div>
+    <div id="overlay">No Feed Available</div>
+  </div>
+  <p id="status">No feed yet.</p>
+  <button id="connect" disabled>Connect to Feed</button>
+  <button id="disconnect" disabled>Stop Feed</button>
+
+  <script>
+    const videoFrame = document.getElementById("videoFrame");
+    const videoIcon = document.getElementById("videoIcon");
+    const statusText = document.getElementById("status");
+    const connectButton = document.getElementById("connect");
+    const disconnectButton = document.getElementById("disconnect");
+    const overlay = document.getElementById("overlay");
+    const cameraSelect = document.getElementById("cameraSelect");
+
+    let socket;
+    let currentBlobUrl;
+    let feedTimeout;
+    let selectedCameraId;
+
+    cameraSelect.addEventListener("change", () => {
+      selectedCameraId = cameraSelect.value;
+      connectButton.disabled = !selectedCameraId;
+      disconnectButton.disabled = true;
+      clearFeed();
+      statusText.textContent = selectedCameraId ? `Selected ${selectedCameraId}` : "No camera selected";
+    });
+
+    function connectToFeed() {
+      if (!selectedCameraId) {
+        console.error("No camera selected");
+        return;
+      }
+
+      socket = new WebSocket("ws://localhost:3001");
+
+      socket.onopen = () => {
+        console.log(`Connected to ${selectedCameraId} feed`);
+        statusText.textContent = `Connected to ${selectedCameraId}`;
+        connectButton.disabled = true;
+        disconnectButton.disabled = false;
+        overlay.style.display = "flex";
+        overlay.textContent = "Waiting for Feed...";
+
+        socket.send(JSON.stringify({ cameraId: selectedCameraId }));
+        resetFeedTimeout();
+      };
+
+      socket.onmessage = (event) => {
+        const { cameraId, data } = JSON.parse(event.data);
+        console.log(`Received frame for ${cameraId}`);
+
+        if (cameraId === selectedCameraId) {
+          // Create a Blob from the base64 string
+          const binaryString = atob(data); // Decode base64 string
+          const len = binaryString.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i); // Convert to byte
+          }
+          const blob = new Blob([bytes], { type: 'image/jpeg' });
+
+          if (currentBlobUrl) {
+            URL.revokeObjectURL(currentBlobUrl);
+          }
+
+          currentBlobUrl = URL.createObjectURL(blob);
+          videoFrame.src = currentBlobUrl;
+          videoIcon.style.display = "none";
+          overlay.style.display = "none";
+          resetFeedTimeout();
+        }
+      };
+
+      socket.onclose = () => {
+        console.log("WebSocket connection closed");
+        clearFeed();
+      };
+
+      socket.onerror = (error) => {
+        statusText.textContent = "Error connecting to feed.";
+        console.error("WebSocket error:", error);
+        clearFeed();
+      };
+    }
+
+    function disconnectFromFeed() {
+      if (socket) {
+        socket.close();
+        socket = null;
+        statusText.textContent = `Disconnected from ${selectedCameraId}`;
+        connectButton.disabled = false;
+        disconnectButton.disabled = true;
+        clearFeed();
+      }
+    }
+
+    function clearFeed() {
+      statusText.textContent = "Feed disconnected.";
+      videoFrame.src = "";
+      videoIcon.style.display = "block";
+      overlay.style.display = "flex";
+      overlay.textContent = "No Feed Available";
+      if (currentBlobUrl) {
+        URL.revokeObjectURL(currentBlobUrl);
+        currentBlobUrl = null;
+      }
+      clearTimeout(feedTimeout);
+    }
+
+    function resetFeedTimeout() {
+      clearTimeout(feedTimeout);
+      feedTimeout = setTimeout(() => {
+        clearFeed();
+      }, 5000);
+    }
+
+    connectButton.addEventListener("click", connectToFeed);
+    disconnectButton.addEventListener("click", disconnectFromFeed);
+  </script>
+</body>
+</html>
